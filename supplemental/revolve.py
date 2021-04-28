@@ -10,16 +10,22 @@ from std_msgs.msg import Bool
 from geometry_msgs.msg import Transform
 from geometry_msgs.msg import TransformStamped
 from rovi_utils import tflib
+from rovi_utils.srv import TextFilter,TextFilterRequest,TextFilterResponse
 from scipy.spatial.transform import Rotation as R
 
 def lookup(a,b):
   try:
+    sys.stdout.write("//lookup "+a+" "+b+"\n")
+    sys.stdout.flush()
     aTb=tfBuffer.lookup_transform(a,b,rospy.Time(0))
   except (tf2_ros.LookupException,tf2_ros.ConnectivityException,tf2_ros.ExtrapolationException):
+    sys.stdout.write("//lookup exception\n")
+    sys.stdout.flush()
     return None
   return aTb
 
-def cb_update():
+def cb_update(req):
+  res=TextFilterResponse()
   stj=lookup("camera/master0","camera/master0/journal")
   stj.header.frame_id="camera/capture0/solve0"
   stj.child_frame_id="camera/capture0/solve0/journal"
@@ -36,7 +42,7 @@ def cb_update():
   bcz=bcz/np.linalg.norm(bcz)
   rot=np.cross(bsz,bcz)
   lrot=np.linalg.norm(rot)
-  arot=np.arcsin(lrot)
+  arot=np.arcsin(lrot)*0.5;
   if lrot>0:
     rot=rot/lrot*arot
   r=R.from_rotvec(rot)
@@ -49,18 +55,17 @@ def cb_update():
   jtr.header.stamp=rospy.Time.now()
   jtr.transform=tflib.fromRT(jTr)
   broadcaster.sendTransform([stj,jtr])
+  return res
 
 ########################################################
 rospy.init_node('revolver',anonymous=True)
 tfBuffer=tf2_ros.Buffer()
 listener=tf2_ros.TransformListener(tfBuffer)
 broadcaster=tf2_ros.StaticTransformBroadcaster()
-
-sys.stdout.write("sys revolve.py started")
+rospy.sleep(0.5)
+sys.stdout.write("//Start revolve.py\n")
 sys.stdout.flush()
 
-while not rospy.is_shutdown():
-  line=sys.stdin.readline()
-  cb_update()
-  sys.stdout.write("revolve.py update")
-  sys.stdout.flush()
+s=rospy.Service('/post/query', TextFilter, cb_update)
+rospy.spin()
+
