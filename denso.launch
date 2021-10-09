@@ -1,0 +1,5 @@
+<launch>
+  <include file="$(find rovi_industrial)/std.launch">
+    <arg name="robot" value="denso" />
+  </include>
+</launch>

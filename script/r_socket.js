@@ -209,6 +209,7 @@ setImmediate(async function(){
   let TX1;
   const server = net.createServer(function(conn){
     conn.setTimeout(Config.socket_timeout*1000);
+    let buffer='';
     let msg='';
     let wdt=null;
     let stat;
@@ -401,49 +402,73 @@ setImmediate(async function(){
         else respNG(conn,protocol,932);
       });
     }
-    conn.on('data',async function(data){
-      msg+=data.toString();
-      ros.log.info("rsocket "+msg+" "+data.toString());
-      if(msg.indexOf('(')*msg.indexOf(')')<0) return;//until msg will like "??(???)"
-      //message received
-      stat_out(true);
-      if(msg.startsWith('P1') && Config.update_frame_id.length>0){
-        let tf=new geometry_msgs.TransformStamped();
-        tf.header.stamp=ros.Time.now();
-        tf.header.frame_id=Config.base_frame_id;
-        tf.child_frame_id=Config.update_frame_id;
-        let tfs=await protocol.decode(msg.substr(2));
-        if(tfs.length>0){
-          tf.transform=tfs[0];
-          pub_tf.publish(tf);
-        }
-        return;
+    async function X8(){
+      let pacs=msg.trim().replace(/\).*/g, '').replace(/.*\(/, '').replace(/ +/, ' ').trim();
+      let args=pacs.split(' ');
+      let cmd='rosparam';
+      if(args.length==1){
+        args.unshift('get');
+        let pid=await spawn(cmd,args,{stdio:['inherit','pipe','inherit']});
+        pid.stdout.on('data',(data)=>{
+            respOK(conn,protocol,data.toString().trim());
+        });
+        pid.on('exit',(data)=>{
+          if(Number(data)!=0){
+            console.log('rosparam get error');
+            respNG(conn,protocol,982);
+          }
+        });
       }
+      else if(args.length==2){
+        args.unshift('set');
+        console.log('rosparam set '+args[0]);
+        let pid=await spawn(cmd,args,{stdio:['inherit','inherit','inherit']});
+        respOK(conn,protocol,args[0]);
+      }
+      else respNG(conn,protocol,981);
+    }
+    conn.on('data',async function(data){
+      buffer+=data.toString();
+      ros.log.info("rsocket "+buffer+" "+data.toString());
+      if(buffer.indexOf('(')*buffer.indexOf(')')<0) return;//until buffer will like "??(???)"
       if(wdt!=null){
         ros.log.warn("rsocket::Xcmd busy");
         respNG(conn,protocol,900); //busy
         return;
-      }
+       }
       if(!Xable){
         respNG(conn,protocol,901);  //X command disabled
         return;
-      }
-      if(msg.startsWith('X012')){//--------------------[X012] CLEAR|CAPT|SOLVE
-        conn.x012=true;
-        X0();
-      }
-      else if(msg.startsWith('X0')) X0();//[X0] ROVI_CLEAR
-      else if(msg.startsWith('X1')) X1();//[X1] ROVI_CAPTURE
-      else if(msg.startsWith('X2')) X2();//[X2] ROVI_SOLVE
-      else if(msg.startsWith('X3')) X3();//[X3] ROVI_RECIPE
-      else if(msg.startsWith('J6')){
-        let j6=await protocol.decode(msg.substr(2).trim());
-        console.log("J6 "+j6[0][0])
-        if(reverse_frame_updater!=null){
-          reverse_frame_updater(j6[0][0]);
-        }
-      }
-      msg='';
+       }
+      //message received
+      stat_out(true);
+      let msgs=buffer.split(')');
+      msg=msgs.shift().trim()+')';
+      do{
+        if(msg.startsWith('X012')){//--------------------[X012] CLEAR|CAPT|SOLVE
+          conn.x012=true;
+          X0();
+         }
+        else if(msg.startsWith('X0')) X0();//[X0] ROVI_CLEAR
+        else if(msg.startsWith('X1')) X1();//[X1] ROVI_CAPTURE
+        else if(msg.startsWith('X2')) X2();//[X2] ROVI_SOLVE
+        else if(msg.startsWith('X3')) X3();//[X3] ROVI_RECIPE
+        else if(msg.startsWith('X8')) X8();//[X8] ROS command
+        else if(msg.startsWith('J6')){
+          let j6=await protocol.decode_(msg.substr(2).trim());
+          console.log("J6 "+protocol.tflib.option+' '+j6[0][0])
+          if(reverse_frame_updater!=null){
+            let jr=Number(j6[0][0]);
+            if(protocol.tflib.option.indexOf('deg')>=0) jr*=0.017453292519943295;
+            reverse_frame_updater(jr);
+           }
+         }
+        if(msgs.length==0) break; 
+        msg=msgs.shift().trim();
+        if(msg.length<2) break;
+        else msg+=')';
+      } while(true);
+      buffer=msg='';
     });
     conn.on('close', function(){
       if(wdt!=null) clearTimeout(wdt);
