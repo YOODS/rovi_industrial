@@ -1,0 +1,26 @@
+def ROVI_SOLVE():
+  buf=p[10000.0,0.0,0.0,0.0,0.0,0.0]
+  socket_open(host,port,socket_name)
+  socket_send_line("X2()",socket_name)
+  ret=socket_read_line(socket_name,socket_timeout)
+  if (ret == "OK"):
+    f=socket_read_ascii_float(6,socket_name,socket_timeout)
+    while (f[0]!=6):
+      sleep(0.3)
+      f=socket_read_ascii_float(6,socket_name,socket_timeout)
+    end
+    counter=0
+    while (counter<6):
+      buf[counter]=f[counter+1]
+      counter=counter+1
+    end
+  end
+  sleep(1.0)
+  socket_close(socket_name)
+  if (ret != "OK"):
+    if (is_popup):
+      popup(ret,title="X2",warning=True,blocking=True)
+    end
+  end
+  return buf
+end
