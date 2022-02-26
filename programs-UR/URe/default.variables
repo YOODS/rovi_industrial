@@ -1,0 +1,7 @@
+#
+#Tue Oct 19 12:27:57 CEST 2021
+socket_timeout=5
+port=3000
+host="192.168.221.2"
+is_popup=True
+socket_name="vt"

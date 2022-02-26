@@ -30,6 +30,7 @@ T1 = transformations.translation_matrix((0,0,0))
 sc1 = Vector3(1,1,1)
 tr2=Transform()
 tr2.translation.z=530
+tr2.rotation.w=1.
 T2=tflib.toRT(tr2)
 sc2 = Vector3(400,300,300)
 

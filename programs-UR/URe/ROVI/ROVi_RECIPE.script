@@ -1,0 +1,16 @@
+def ROVI_RECIPE(recipe):
+  if (not socket_open(host,port,socket_name)):
+    return False
+  end
+  socket_send_line("X3("+recipe+")",socket_name)
+  ret=socket_read_line(socket_name)
+  socket_close(socket_name)
+  if (ret != "OK"):
+    if (is_popup):
+      popup(ret,title="X3",warning=True,blocking=True)
+    end
+    return False
+  else:
+    return True
+  end
+end
