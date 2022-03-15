@@ -10,7 +10,7 @@ module.exports={
     return "["+tarr.concat(rarr).join(",")+"]";
   },
   decode_:function(msg){
-    let jss=msg.replace(/\).*/g, ']').replace(/.*\(/, '[').replace(/;/, '],[').replace(/E\+/g, 'E').replace(/\+/g, '');
+    let jss=msg.replace(/\).*/g, ']').replace(/.*\(/, '[').replace(/;/g, '],[').replace(/E\+/g, 'E').replace(/\+/g, '');
     if(jss.length<=2) return [];
     return JSON.parse('['+jss+']');
   },
