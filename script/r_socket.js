@@ -200,7 +200,7 @@ setImmediate(async function(){
         return;
       }
       ros.log.warn("rsocket::X1 tf parse "+JSON.stringify(tfs));
-      if(tfs.length>0 && tfs[0].hasOwnProperty('translation') && Config.update_frame_id.length>0){        
+      if(tfs.length>0 && tfs[0].hasOwnProperty('translation') && Config.update_frame_id.length>0){
         let tf=tf_update(tfs[0],Config.update_frame_id);
         pub_tf.publish(tf);
       }
@@ -333,6 +333,25 @@ setImmediate(async function(){
         else respNG(conn,protocol,932);
       });
     }
+    async function X7(){
+      let pacs=msg.trim().replace(/\).*/g, '').replace(/.*\(/, '').replace(/ +/, ' ').trim();
+      let args=pacs.split(' ');
+      let cmd='rostopic';
+      args.unshift('-1');
+      args.unshift('pub');
+      args.push('std_msgs/Bool');
+      args.push('True');
+      let pid=await spawn(cmd,args,{stdio:['inherit','pipe','inherit']});
+      pid.stdout.on('data',()=>{
+        respOK(conn,protocol);
+       });
+      pid.on('exit',(data)=>{
+        if(Number(data)!=0){
+          console.log('rostopic pub error');
+          respNG(conn,protocol,972);
+         }
+       });
+     }
     async function X8(){
       let pacs=msg.trim().replace(/\).*/g, '').replace(/.*\(/, '').replace(/ +/, ' ').trim();
       let args=pacs.split(' ');
@@ -380,11 +399,12 @@ setImmediate(async function(){
           conn.x012=true;
           X0();
          }
-        else if(msg.startsWith('X0')) X0();//[X0] ROVI_CLEAR
-        else if(msg.startsWith('X1')) X1();//[X1] ROVI_CAPTURE
-        else if(msg.startsWith('X2')) X2();//[X2] ROVI_SOLVE
-        else if(msg.startsWith('X3')) X3();//[X3] ROVI_RECIPE
-        else if(msg.startsWith('X8')) X8();//[X8] ROS command
+        else if(msg.startsWith('X0')) X0();//ROVI_CLEAR
+        else if(msg.startsWith('X1')) X1();//ROVI_CAPTURE
+        else if(msg.startsWith('X2')) X2();//ROVI_SOLVE
+        else if(msg.startsWith('X3')) X3();//ROVI_RECIPE
+        else if(msg.startsWith('X7')) X7();//ROS command
+        else if(msg.startsWith('X8')) X8();//ROS command
         else if(msg.startsWith('J6')){
           let j6=await protocol.decode_(msg.substr(2).trim());
           console.log("J6 "+protocol.tflib.option+' '+j6[0][0])
