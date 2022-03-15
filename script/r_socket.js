@@ -26,7 +26,7 @@ let Config={
   update_frame_id:'',
   check_frame_id:'',
   fitness:'fitness',
-  post:{'revolve':{'launch':'rosrun rovi_industrial revolve.py'}},
+  x1keys:[],
   reverse_frame_id:'',
   reverse_direction:1,
 };
@@ -56,43 +56,7 @@ setImmediate(async function(){
     emitter.emit('capture',ret.data);
   });
   rosNode.subscribe('/response/solve',std_msgs.Bool,async function(ret){
-    if(!ret.data) emitter.emit('solve',ret.data);
-    else if(typeof Config.post=="string"){
-      if(Config.hasOwnProperty('post_svc')){
-        let req=new utils_srvs.TextFilter.Request();
-        req.data='';
-        ros.log.info('post query:'+req.data);
-        let res;
-        try{
-          res=await Config.post_svc.call(req);
-        }
-        catch(err){
-          ros.log.error('post query error');
-          respNG(conn,protocol,924); 
-          return;
-        }
-        ros.log.info('post query done');
-        emitter.emit('solve',true);
-      }
-    }
-    else if(Config.post.hasOwnProperty(Param.post)){
-      let proc=Config.post[Param.post];
-      let req=new utils_srvs.TextFilter.Request();
-      req.data='';
-      ros.log.info('post call');
-      let res;
-      try{
-        res=await proc.svc.call(req);
-      }
-      catch(err){
-        ros.log.error('post call error');
-        respNG(conn,protocol,924);
-        return;
-      }
-      ros.log.info('post call done');
-      emitter.emit('solve',true);
-    }
-    else emitter.emit('solve',ret.data);
+    emitter.emit('solve',ret.data);
   });
   rosNode.subscribe('/response/recipe_load',std_msgs.Bool,async function(ret){
     emitter.emit('recipe',ret.data);
@@ -259,7 +223,13 @@ setImmediate(async function(){
         ros.log.info("rsocket::capture done "+ret+" "+(ros.Time.toSeconds(t1)-ros.Time.toSeconds(t0)));
         if(ret){
           if(conn.x012) setImmediate(X2);
-          else respOK(conn,protocol);
+          else{
+            if(Config.x1keys.length==0) respOK(conn,protocol);
+            else{
+              let vals=Config.x1keys.map(k=>Score[k]);
+              respOK(conn,protocol,vals.toString());
+              }
+           }
         }
         else respNG(conn,protocol,912); //failed to capture
       });
@@ -279,44 +249,6 @@ setImmediate(async function(){
       if(tfs.length>0 && tfs[0].hasOwnProperty('translation') && Config.check_frame_id.length>0){
         let tf=tf_update(tfs[0],Config.check_frame_id);
         pub_tf.publish(tf);
-      }
-
-      try{
-        if(typeof Config.post=="string"){
-          if(!Config.hasOwnProperty("post_pid")){
-            ros.log.info("r-socket launch postprocessor:"+Config.post);
-            let args=Config.post.split(' ');
-            let cmd=args.shift();
-            Config.post_pid=await spawn(cmd,args,{stdio:['inherit','inherit','inherit']});
-            Config.post_svc=rosNode.serviceClient('/post/query', utils_srvs.TextFilter, { persist: false });
-            if (!await rosNode.waitForService(Config.post_svc.getService(), 2000)) {
-              ros.log.error('post service not available');
-              return;
-            }
-          }
-        }
-        else{
-          let obj=await rosNode.getParam(namespace);
-          Object.assign(Param,obj);
-          if(Config.post.hasOwnProperty(Param.post)){
-            let proc=Config.post[Param.post];
-            if(!proc.hasOwnProperty("pid")){
-              ros.log.info("r-socket launch postprocessor:"+proc.launch);
-              let args=proc.launch.split(' ');
-              let cmd=args.shift();
-              proc.pid=await spawn(cmd,args,{'stdio':['inherit','inherit','inherit']});
-              proc.svc=rosNode.serviceClient('/post/query', utils_srvs.TextFilter, { persist: false });
-              if (!await rosNode.waitForService(proc.svc.getService(), 2000)) {
-                ros.log.error('post service not available');
-                return;
-              }
-            }
-          }
-        }
-      }
-      catch(e){
-        console.log("Post processor exec error"+Config.post);
-        if(Config.hasOwnProperty("post_pid")) delete Config.post_pid;
       }
 
       let f=new std_msgs.Bool();
@@ -346,7 +278,6 @@ setImmediate(async function(){
         }
         let req=new utils_srvs.TextFilter.Request();
         req.data=Config.base_frame_id+' '+Config.source_frame_id+' '+Config.target_frame_id;
-        if(Param.post.length>0) req.data+='/'+Param.post;
         console.log('tf lookup:'+req.data);
         let res;
         try{
@@ -402,6 +333,25 @@ setImmediate(async function(){
         else respNG(conn,protocol,932);
       });
     }
+    async function X7(){
+      let pacs=msg.trim().replace(/\).*/g, '').replace(/.*\(/, '').replace(/ +/, ' ').trim();
+      let args=pacs.split(' ');
+      let cmd='rostopic';
+      args.unshift('-1');
+      args.unshift('pub');
+      args.push('std_msgs/Bool');
+      args.push('True');
+      let pid=await spawn(cmd,args,{stdio:['inherit','pipe','inherit']});
+      pid.stdout.on('data',()=>{
+        respOK(conn,protocol);
+       });
+      pid.on('exit',(data)=>{
+        if(Number(data)!=0){
+          console.log('rostopic pub error');
+          respNG(conn,protocol,972);
+         }
+       });
+     }
     async function X8(){
       let pacs=msg.trim().replace(/\).*/g, '').replace(/.*\(/, '').replace(/ +/, ' ').trim();
       let args=pacs.split(' ');
@@ -449,11 +399,12 @@ setImmediate(async function(){
           conn.x012=true;
           X0();
          }
-        else if(msg.startsWith('X0')) X0();//[X0] ROVI_CLEAR
-        else if(msg.startsWith('X1')) X1();//[X1] ROVI_CAPTURE
-        else if(msg.startsWith('X2')) X2();//[X2] ROVI_SOLVE
-        else if(msg.startsWith('X3')) X3();//[X3] ROVI_RECIPE
-        else if(msg.startsWith('X8')) X8();//[X8] ROS command
+        else if(msg.startsWith('X0')) X0();//ROVI_CLEAR
+        else if(msg.startsWith('X1')) X1();//ROVI_CAPTURE
+        else if(msg.startsWith('X2')) X2();//ROVI_SOLVE
+        else if(msg.startsWith('X3')) X3();//ROVI_RECIPE
+        else if(msg.startsWith('X7')) X7();//ROS command
+        else if(msg.startsWith('X8')) X8();//ROS command
         else if(msg.startsWith('J6')){
           let j6=await protocol.decode_(msg.substr(2).trim());
           console.log("J6 "+protocol.tflib.option+' '+j6[0][0])
