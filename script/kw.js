@@ -15,5 +15,5 @@ protocol.encode=async function(tf){
 
 protocol.delim=",";
 protocol.lf="";
-
+protocol.joints=['joint_1_s', 'joint_2_l', 'joint_3_u', 'joint_4_r', 'joint_5_b', 'joint_6_t'];
 module.exports=protocol;
